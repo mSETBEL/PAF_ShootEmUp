@@ -47,6 +47,7 @@ update _ (GameControl kbd gs) =
   let gs2 = if isKeyDown (SpecialKey KeyRight) kbd then moveRight gs1 else gs1 in 
   let gs3 = if isKeyDown (SpecialKey KeyUp) kbd then moveUp gs2 else gs2 in
   let gs4 = if isKeyDown (SpecialKey KeyDown) kbd then moveDown gs3 else gs3 in
+  let gs5 = updateScroll gs4 in
   
     
   GameControl kbd gs4
