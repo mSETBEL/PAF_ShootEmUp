@@ -4,42 +4,84 @@ module Model where
 data GameState = GameState { persoX :: Float
                            , persoY :: Float
                            , speed :: Float 
-                           , murGauche :: MurGauche
-                           , murDroit :: MurDroit
-                           , scroll :: Float
+                           , projectiles :: [Projectile]
                            }
   deriving (Show)
 
+data Direction = LeftDir | RightDir | UpDir | DownDir
+  deriving (Show, Eq)
 
-data Hitbox = Point Int Int
-            | Disque Int Int Int       -- centre x, centre y, rayon
-            | Rectangle Int Int Int Int -- x, y, largeur, hauteur
+data Projectile = Projectile {
+                             projSpeed :: Int
+                           , projTick :: Int
+                           , projHitbox :: Hitbox
+                           , projDirection :: Direction 
+                           }
+  deriving (Show)
+
+data Hitbox = Point Float Float
+            | Disque Float Float Float       -- centre x, centre y, rayon
+            | Rectangle Float Float Float Float -- x, y, largeur, hauteur
             | Composee [Hitbox]
-            | MurGauche [(Int, Int)]
-            | MurDroit [(Int, Int)]
+            | MurGauche [(Float, Float)]
+            | MurDroit [(Float, Float)]
             deriving (Eq, Show)
 
-
+scrollSpeed :: Float
+scrollSpeed = 2.0
 
 initGameState :: GameState
-initGameState = GameState 0 0 2
+initGameState = GameState 0 0 2 []
 
 moveLeft :: GameState -> GameState
-moveLeft gs@(GameState px _ sp) | px > -310 = gs { persoX = px - sp }
+moveLeft gs@(GameState px _ sp _) | px > -310 = gs { persoX = px - sp }
                                 | otherwise = gs
 
 moveRight :: GameState -> GameState
-moveRight gs@(GameState px _ sp) | px < 310 = gs { persoX = px + sp }
+moveRight gs@(GameState px _ sp _) | px < 310 = gs { persoX = px + sp }
                                  | otherwise = gs
                               
 moveDown :: GameState -> GameState
-moveDown gs@(GameState _ py sp) | py > -160  = gs { persoY = py - sp }
+moveDown gs@(GameState _ py sp _) | py > -160  = gs { persoY = py - sp }
                               | otherwise = gs
 
 moveUp :: GameState -> GameState
-moveUp gs@(GameState _ py sp) | py < 160 = gs { persoY = py + sp }
+moveUp gs@(GameState _ py sp _) | py < 160 = gs { persoY = py + sp }
                                 | otherwise = gs
 
+shoot :: GameState -> GameState
+shoot gs@(GameState px py sp projs) =
+  let newProj = Projectile 2 2 (Disque px (py+20) 4) UpDir
+  in gs { projectiles = newProj : projs }
+
+tickProjectile :: Projectile -> Projectile
+tickProjectile proj@(Projectile sp tick hitbox dir) =
+  if tick > 0
+    then proj { projTick = tick - 1 }
+    else moveProjectile proj
+
+moveProjectile :: Projectile -> Projectile
+moveProjectile proj@(Projectile sp tick (Disque cx cy r) dir) =
+  let (dx, dy) = case dir of
+                    LeftDir  -> (-1, 0)
+                    RightDir -> (1, 0)
+                    UpDir    -> (0, 1)
+                    DownDir  -> (0, -1)
+      newCx = cx + dx 
+      newCy = cy + dy 
+  in proj { projHitbox = Disque newCx newCy r, projTick = sp }
+
+cullProjectile :: [Projectile] -> [Projectile]
+cullProjectile = filter (\p -> onScreen p) 
+  where
+    onScreen (Projectile _ _ (Disque cx cy r) _) =
+      cx + r >= -320 && cx - r <= 320 && cy + r >= -240 && cy - r <= 240
+
+updateProjectiles :: GameState -> GameState
+updateProjectiles (GameState px py sp projs) =
+  let updatedProjs = map tickProjectile projs
+      culledProjs = cullProjectile updatedProjs
+  in GameState px py sp culledProjs
 
 
 collision :: Hitbox -> Hitbox -> Bool
@@ -68,26 +110,25 @@ collision (MurGauche segs) (Point px py) =
   case findSegment py segs of
     Nothing          -> False
     Just (x1,y1,x2,y2) -> 
-      let t     = fromIntegral (py - y1) / fromIntegral (y2 - y1) :: Float
-          wallX = fromIntegral x1 + t * fromIntegral (x2 - x1)
-      in fromIntegral px <= wallX
+      let t     = (py - y1) /  (y2 - y1) :: Float
+          wallX =  x1 + t * (x2 - x1)
+      in  px <= wallX
 
 collision (MurDroit segs) (Point px py) =
   case findSegment py segs of
     Nothing          -> False
     Just (x1,y1,x2,y2) -> 
-      let t     = fromIntegral (py - y1) / fromIntegral (y2 - y1) :: Float
-          wallX = fromIntegral x1 + t * fromIntegral (x2 - x1)
-      in fromIntegral px >= wallX
+      let t     = (py - y1) /  (y2 - y1) :: Float
+          wallX =  x1 + t * (x2 - x1)
+      in  px >= wallX
+collision a b = collision b a
 
 
 
-
-findSegment :: Int -> [(Int,Int)] -> Maybe (Int,Int,Int,Int)
+findSegment :: Float -> [(Float,Float)] -> Maybe (Float,Float,Float,Float)
 findSegment py pts = go pts
   where
     go ((x1,y1):(x2,y2):rest)
       | py >= y1 && py < y2 = Just (x1,y1,x2,y2)
       | otherwise            = go ((x2,y2):rest)
     go _ = Nothing
-collision a b = collision b a

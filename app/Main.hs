@@ -20,19 +20,25 @@ initGame = GameControl {
                   state = initGameState
 }
 
-render :: Picture -> Picture -> GameControl -> Picture
-render bgnd perso (GameControl _ (GameState px py _)) =
+render :: Picture -> Picture -> Picture -> GameControl -> Picture
+render bgnd perso projectile (GameControl _ (GameState px py _ projs)) =
   -- trace ("px=" <> (show px) <> ", py=" <> (show py))
-  Pictures [bgnd, (Translate px py perso)]
+  Pictures [bgnd, (Translate px py perso), Pictures (map renderProjectile projs)]
+  where
+    renderProjectile (Projectile _ _ (Disque cx cy r) dir) = Translate cx cy projectile
+
 
 
 handleEvents :: Event -> GameControl -> GameControl
 handleEvents ev (GameControl kbd gs) =
   case ev of
 
+    EventKey (SpecialKey KeySpace) Down _ _ -> 
+      trace "Pew! " (GameControl kbd (shoot gs))
+    
     -- Mouse click (your existing code)
     EventKey (MouseButton LeftButton) Down _ (mx, my) ->
-      let GameState px py _ = gs
+      let GameState px py _ _= gs
           touched = isInside mx my px py
       in if touched
         then trace "Touché !" (GameControl (handleKeyEvent ev kbd) gs)
@@ -47,10 +53,15 @@ update _ (GameControl kbd gs) =
   let gs2 = if isKeyDown (SpecialKey KeyRight) kbd then moveRight gs1 else gs1 in 
   let gs3 = if isKeyDown (SpecialKey KeyUp) kbd then moveUp gs2 else gs2 in
   let gs4 = if isKeyDown (SpecialKey KeyDown) kbd then moveDown gs3 else gs3 in
-  let gs5 = updateScroll gs4 in
-  
+  let gs5 = updateProjectiles gs4 in
+  --let gs5 = updateScroll gs4 in
+  --let gs6 = updateWalls gs5 in
     
-  GameControl kbd gs4
+  GameControl kbd gs5
+
+
+--updtateScroll :: GameState -> GameState
+--updateScroll gs@(GameState _ _ _ _ _ sc) = gs { scroll = sc + scrollSpeed }
 
 
 
@@ -58,12 +69,13 @@ main :: IO ()
 main = do
   bgnd <- loadBMP "./assets/background.bmp"
   perso <- loadBMP "./assets/perso.bmp"
+  projectile <- loadBMP "./assets/ball.bmp"
   
   play (InWindow "Minijeu" (640, 360) (10, 10)) 
        black
         60
         initGame
-        (render bgnd perso)
+        (render bgnd perso projectile)
         handleEvents
         update
 
