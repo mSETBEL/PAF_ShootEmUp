@@ -20,13 +20,13 @@ initGame = GameControl {
                   state = initGameState
 }
 
-render :: Picture -> Picture -> Picture -> GameControl -> Picture
-render bgnd perso projectile (GameControl _ (GameState px py _ projs)) =
-  -- trace ("px=" <> (show px) <> ", py=" <> (show py))
-  Pictures [bgnd, (Translate px py perso), Pictures (map renderProjectile projs)]
+render :: Picture -> Picture -> Picture -> Picture -> GameControl -> Picture
+render bgnd perso projectile ennemy (GameControl _ (GameState player projs enns _)) =
+  -- trace ("px=" <> (show (persoX player)) <> ", py=" <> (show (persoY player)))
+  Pictures [bgnd, (Translate (persoX player) (persoY player) perso), Pictures (map renderProjectile projs), Pictures (map renderEnnemy enns)]
   where
     renderProjectile (Projectile _ _ (Disque cx cy r) dir) = Translate cx cy projectile
-
+    renderEnnemy (Ennemy _ (Disque cx cy r) _) = Translate cx cy ennemy
 
 
 handleEvents :: Event -> GameControl -> GameControl
@@ -34,12 +34,12 @@ handleEvents ev (GameControl kbd gs) =
   case ev of
 
     EventKey (SpecialKey KeySpace) Down _ _ -> 
-      trace "Pew! " (GameControl kbd (shoot gs))
+      (GameControl kbd (shoot gs))
     
     -- Mouse click (your existing code)
     EventKey (MouseButton LeftButton) Down _ (mx, my) ->
-      let GameState px py _ _= gs
-          touched = isInside mx my px py
+      let GameState player _ _ _= gs
+          touched = isInside mx my (persoX player) (persoY player)
       in if touched
         then trace "Touché !" (GameControl (handleKeyEvent ev kbd) gs)
          else GameControl kbd gs
@@ -54,10 +54,11 @@ update _ (GameControl kbd gs) =
   let gs3 = if isKeyDown (SpecialKey KeyUp) kbd then moveUp gs2 else gs2 in
   let gs4 = if isKeyDown (SpecialKey KeyDown) kbd then moveDown gs3 else gs3 in
   let gs5 = updateProjectiles gs4 in
+  let gs6 = updateEnnemies gs5 in
   --let gs5 = updateScroll gs4 in
   --let gs6 = updateWalls gs5 in
     
-  GameControl kbd gs5
+  GameControl kbd gs6
 
 
 --updtateScroll :: GameState -> GameState
@@ -70,12 +71,13 @@ main = do
   bgnd <- loadBMP "./assets/background.bmp"
   perso <- loadBMP "./assets/perso.bmp"
   projectile <- loadBMP "./assets/ball.bmp"
+  ennemy <- loadBMP "./assets/ennemy.bmp"
   
   play (InWindow "Minijeu" (640, 360) (10, 10)) 
        black
         60
         initGame
-        (render bgnd perso projectile)
+        (render bgnd perso projectile ennemy)
         handleEvents
         update
 

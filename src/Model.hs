@@ -1,16 +1,22 @@
 module Model where
 
 
-data GameState = GameState { persoX :: Float
-                           , persoY :: Float
-                           , speed :: Float 
+data GameState = GameState { player :: Player
                            , projectiles :: [Projectile]
+                           , enemies :: [Ennemy]
+                           , ennemySpawnTimer :: Int
                            }
   deriving (Show)
 
 data Direction = LeftDir | RightDir | UpDir | DownDir
   deriving (Show, Eq)
 
+data Player = Player {
+                      persoX :: Float
+                    , persoY :: Float
+                    , persoSpeed :: Float
+                    }
+  deriving (Show)
 data Projectile = Projectile {
                              projSpeed :: Int
                            , projTick :: Int
@@ -18,6 +24,16 @@ data Projectile = Projectile {
                            , projDirection :: Direction 
                            }
   deriving (Show)
+
+data Ennemy = Ennemy {  
+                          ennemySpeed :: Float
+                          , ennemyHitbox :: Hitbox
+                          , ennemyDirection :: Direction
+                          }
+  deriving (Show)
+
+ennemySpawnSpeed :: Int
+ennemySpawnSpeed = 100
 
 data Hitbox = Point Float Float
             | Disque Float Float Float       -- centre x, centre y, rayon
@@ -30,28 +46,33 @@ data Hitbox = Point Float Float
 scrollSpeed :: Float
 scrollSpeed = 2.0
 
+initPlayer :: Player
+initPlayer = Player 0 0 2
+
 initGameState :: GameState
-initGameState = GameState 0 0 2 []
+initGameState = GameState initPlayer [] [] ennemySpawnSpeed
 
 moveLeft :: GameState -> GameState
-moveLeft gs@(GameState px _ sp _) | px > -310 = gs { persoX = px - sp }
+moveLeft gs@(GameState player _ _ _) | persoX player > -310 = gs { player = player { persoX = persoX player - persoSpeed player } }
                                 | otherwise = gs
 
 moveRight :: GameState -> GameState
-moveRight gs@(GameState px _ sp _) | px < 310 = gs { persoX = px + sp }
+moveRight gs@(GameState player _ _ _) | persoX player < 310 = gs { player = player { persoX = persoX player + persoSpeed player } }
                                  | otherwise = gs
                               
 moveDown :: GameState -> GameState
-moveDown gs@(GameState _ py sp _) | py > -160  = gs { persoY = py - sp }
+moveDown gs@(GameState player _ _ _) | persoY player > -160  = gs { player = player { persoY = persoY player - persoSpeed player } }
                               | otherwise = gs
 
 moveUp :: GameState -> GameState
-moveUp gs@(GameState _ py sp _) | py < 160 = gs { persoY = py + sp }
+moveUp gs@(GameState player _ _ _) | persoY player < 160 = gs { player = player { persoY = persoY player + persoSpeed player } }
                                 | otherwise = gs
 
+
+-- Projectile stuff
 shoot :: GameState -> GameState
-shoot gs@(GameState px py sp projs) =
-  let newProj = Projectile 2 2 (Disque px (py+20) 4) UpDir
+shoot gs@(GameState player projs _ _) =
+  let newProj = Projectile 1 1 (Disque (persoX player) (persoY player + 20) 4) UpDir
   in gs { projectiles = newProj : projs }
 
 tickProjectile :: Projectile -> Projectile
@@ -78,12 +99,47 @@ cullProjectile = filter (\p -> onScreen p)
       cx + r >= -320 && cx - r <= 320 && cy + r >= -240 && cy - r <= 240
 
 updateProjectiles :: GameState -> GameState
-updateProjectiles (GameState px py sp projs) =
+updateProjectiles (GameState player projs e est) =
   let updatedProjs = map tickProjectile projs
       culledProjs = cullProjectile updatedProjs
-  in GameState px py sp culledProjs
+  in GameState player culledProjs e est
 
 
+-- enemy stuff
+moveEnnemy :: Ennemy -> Ennemy
+moveEnnemy ennemy@(Ennemy speed (Disque cx cy r) dir) =
+
+  let newDir = case cx of
+                  x | x <= -310 -> RightDir
+                    | x >= 310  -> LeftDir
+                    | otherwise -> dir
+  in let (newCx, newCy) = case newDir of
+                    LeftDir  -> (cx-speed, cy)
+                    RightDir -> (cx+speed, cy)
+                    UpDir    -> (cx, cy+speed)
+                    DownDir  -> (cx, cy-speed)
+  in ennemy { ennemyHitbox = Disque newCx newCy r, ennemyDirection = newDir }
+
+spawnEnnemy :: GameState -> GameState
+spawnEnnemy gs@(GameState player projs enns est) =
+  let newEnnemy = Ennemy 2 (Disque (-310) 160 8) RightDir
+  in gs { enemies = newEnnemy : enns }
+
+killEnnemy :: GameState -> GameState
+killEnnemy gs@(GameState player projs enns est) =
+  let updatedEnns = filter (not . isKilled) enns
+  in gs { enemies = updatedEnns }
+  where
+    isKilled ennemy = any (\proj -> collision (projHitbox proj) (ennemyHitbox ennemy)) projs
+
+updateEnnemies :: GameState -> GameState
+updateEnnemies gs@(GameState player projs enns est) =
+  let moved  = gs { enemies = map moveEnnemy enns }
+      killed = killEnnemy moved
+  in if est <= 0
+     then spawnEnnemy (killed { ennemySpawnTimer = ennemySpawnSpeed })
+     else killed { ennemySpawnTimer = est - 1 }
+--
 collision :: Hitbox -> Hitbox -> Bool
 collision (Point x1 y1) (Point x2 y2) = 
   x1 == x2 && y1 == y2
