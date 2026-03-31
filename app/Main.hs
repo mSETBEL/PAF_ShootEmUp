@@ -21,9 +21,11 @@ initGame = GameControl {
 }
 
 render :: Picture -> Picture -> Picture -> Picture -> GameControl -> Picture
-render bgnd perso projectile ennemy (GameControl _ (GameState player projs enns _)) =
+render bgnd perso projectile ennemy (GameControl _ (GameState player projs enns est sc)) =
   -- trace ("px=" <> (show (persoX player)) <> ", py=" <> (show (persoY player)))
-  Pictures [bgnd, (Translate (persoX player) (persoY player) perso), Pictures (map renderProjectile projs), Pictures (map renderEnnemy enns)]
+  let bg = Pictures [ Translate 0 sc bgnd   
+            , Translate 0 (sc+358) bgnd ] in
+  Pictures [bg, (Translate (persoX player) (persoY player) perso), Pictures (map renderProjectile projs), Pictures (map renderEnnemy enns)]
   where
     renderProjectile (Projectile _ _ (Disque cx cy r) dir) = Translate cx cy projectile
     renderEnnemy (Ennemy _ (Disque cx cy r) _) = Translate cx cy ennemy
@@ -38,7 +40,7 @@ handleEvents ev (GameControl kbd gs) =
     
     -- Mouse click (your existing code)
     EventKey (MouseButton LeftButton) Down _ (mx, my) ->
-      let GameState player _ _ _= gs
+      let GameState player _ _ _ _= gs
           touched = isInside mx my (persoX player) (persoY player)
       in if touched
         then trace "Touché !" (GameControl (handleKeyEvent ev kbd) gs)
@@ -55,10 +57,11 @@ update _ (GameControl kbd gs) =
   let gs4 = if isKeyDown (SpecialKey KeyDown) kbd then moveDown gs3 else gs3 in
   let gs5 = updateProjectiles gs4 in
   let gs6 = updateEnnemies gs5 in
+  let gs7 = updateScroll gs6 in
   --let gs5 = updateScroll gs4 in
   --let gs6 = updateWalls gs5 in
     
-  GameControl kbd gs6
+  GameControl kbd gs7
 
 
 --updtateScroll :: GameState -> GameState
@@ -73,7 +76,7 @@ main = do
   projectile <- loadBMP "./assets/ball.bmp"
   ennemy <- loadBMP "./assets/ennemy.bmp"
   
-  play (InWindow "Minijeu" (640, 360) (10, 10)) 
+  play (InWindow "Minijeu" (566, 358) (10, 10)) 
        black
         60
         initGame

@@ -5,6 +5,7 @@ data GameState = GameState { player :: Player
                            , projectiles :: [Projectile]
                            , enemies :: [Ennemy]
                            , ennemySpawnTimer :: Int
+                           , scrollOffset :: Float
                            }
   deriving (Show)
 
@@ -44,34 +45,34 @@ data Hitbox = Point Float Float
             deriving (Eq, Show)
 
 scrollSpeed :: Float
-scrollSpeed = 2.0
+scrollSpeed = 0.5
 
 initPlayer :: Player
 initPlayer = Player 0 0 2
 
 initGameState :: GameState
-initGameState = GameState initPlayer [] [] ennemySpawnSpeed
+initGameState = GameState initPlayer [] [] ennemySpawnSpeed 0.0
 
 moveLeft :: GameState -> GameState
-moveLeft gs@(GameState player _ _ _) | persoX player > -310 = gs { player = player { persoX = persoX player - persoSpeed player } }
+moveLeft gs@(GameState player _ _ _ _) | persoX player > -273 = gs { player = player { persoX = persoX player - persoSpeed player } }
                                 | otherwise = gs
 
 moveRight :: GameState -> GameState
-moveRight gs@(GameState player _ _ _) | persoX player < 310 = gs { player = player { persoX = persoX player + persoSpeed player } }
+moveRight gs@(GameState player _ _ _ _) | persoX player < 273 = gs { player = player { persoX = persoX player + persoSpeed player } }
                                  | otherwise = gs
                               
 moveDown :: GameState -> GameState
-moveDown gs@(GameState player _ _ _) | persoY player > -160  = gs { player = player { persoY = persoY player - persoSpeed player } }
+moveDown gs@(GameState player _ _ _ _) | persoY player > -159  = gs { player = player { persoY = persoY player - persoSpeed player } }
                               | otherwise = gs
 
 moveUp :: GameState -> GameState
-moveUp gs@(GameState player _ _ _) | persoY player < 160 = gs { player = player { persoY = persoY player + persoSpeed player } }
+moveUp gs@(GameState player _ _ _ _) | persoY player < 159 = gs { player = player { persoY = persoY player + persoSpeed player } }
                                 | otherwise = gs
 
 
 -- Projectile stuff
 shoot :: GameState -> GameState
-shoot gs@(GameState player projs _ _) =
+shoot gs@(GameState player projs _ _ _) =
   let newProj = Projectile 1 1 (Disque (persoX player) (persoY player + 20) 4) UpDir
   in gs { projectiles = newProj : projs }
 
@@ -96,13 +97,13 @@ cullProjectile :: [Projectile] -> [Projectile]
 cullProjectile = filter (\p -> onScreen p) 
   where
     onScreen (Projectile _ _ (Disque cx cy r) _) =
-      cx + r >= -320 && cx - r <= 320 && cy + r >= -240 && cy - r <= 240
+      cx + r >= -283 && cx - r <= 283 && cy + r >= -179 && cy - r <= 179
 
 updateProjectiles :: GameState -> GameState
-updateProjectiles (GameState player projs e est) =
+updateProjectiles (GameState player projs e est scrollOffset) =
   let updatedProjs = map tickProjectile projs
       culledProjs = cullProjectile updatedProjs
-  in GameState player culledProjs e est
+  in GameState player culledProjs e est scrollOffset
 
 
 -- enemy stuff
@@ -110,8 +111,8 @@ moveEnnemy :: Ennemy -> Ennemy
 moveEnnemy ennemy@(Ennemy speed (Disque cx cy r) dir) =
 
   let newDir = case cx of
-                  x | x <= -310 -> RightDir
-                    | x >= 310  -> LeftDir
+                  x | x <= -275 -> RightDir
+                    | x >= 275  -> LeftDir
                     | otherwise -> dir
   in let (newCx, newCy) = case newDir of
                     LeftDir  -> (cx-speed, cy)
@@ -121,19 +122,19 @@ moveEnnemy ennemy@(Ennemy speed (Disque cx cy r) dir) =
   in ennemy { ennemyHitbox = Disque newCx newCy r, ennemyDirection = newDir }
 
 spawnEnnemy :: GameState -> GameState
-spawnEnnemy gs@(GameState player projs enns est) =
-  let newEnnemy = Ennemy 2 (Disque (-310) 160 8) RightDir
+spawnEnnemy gs@(GameState player projs enns est _) =
+  let newEnnemy = Ennemy 2 (Disque (-275) 130 8) RightDir
   in gs { enemies = newEnnemy : enns }
 
 killEnnemy :: GameState -> GameState
-killEnnemy gs@(GameState player projs enns est) =
+killEnnemy gs@(GameState player projs enns est _) =
   let updatedEnns = filter (not . isKilled) enns
   in gs { enemies = updatedEnns }
   where
     isKilled ennemy = any (\proj -> collision (projHitbox proj) (ennemyHitbox ennemy)) projs
 
 updateEnnemies :: GameState -> GameState
-updateEnnemies gs@(GameState player projs enns est) =
+updateEnnemies gs@(GameState player projs enns est _) =
   let moved  = gs { enemies = map moveEnnemy enns }
       killed = killEnnemy moved
   in if est <= 0
@@ -188,3 +189,8 @@ findSegment py pts = go pts
       | py >= y1 && py < y2 = Just (x1,y1,x2,y2)
       | otherwise            = go ((x2,y2):rest)
     go _ = Nothing
+
+--scroll stuff
+updateScroll :: GameState -> GameState
+updateScroll gs = gs { scrollOffset = if scrollOffset gs <= -358 then 0 
+                                 else scrollOffset gs - scrollSpeed }
