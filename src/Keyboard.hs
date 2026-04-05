@@ -25,8 +25,4 @@ handleKeyEvent _ kbd = kbd
 isKeyDown :: Key -> Keyboard -> Bool
 isKeyDown key kbd = S.member key kbd
 
-isInside :: Float -> Float -> Float -> Float -> Bool
-isInside mx my px py =
-  mx >= px - 10 && mx <= px + 10 &&
-  my >= py - 18 && my <= py + 18
   

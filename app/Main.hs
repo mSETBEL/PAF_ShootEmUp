@@ -6,7 +6,7 @@ import Debug.Trace (trace)
 
 import Model
 
-import Keyboard (Keyboard, initKeyboard, handleKeyEvent, isKeyDown, isInside)
+import Keyboard (Keyboard, initKeyboard, handleKeyEvent, isKeyDown)
 
 data GameControl = GameControl { 
     keyboard :: Keyboard,
@@ -21,13 +21,13 @@ initGame = GameControl {
 }
 
 render :: Picture -> Picture -> Picture -> Picture -> GameControl -> Picture
-render bgnd perso projectile ennemy (GameControl _ (GameState player projs enns est sc)) =
+render bgnd perso projectile ennemy (GameControl _ (GameState (Player _ (Model.Rectangle px py pw ph) _) projs enns est sc)) =
   -- trace ("px=" <> (show (persoX player)) <> ", py=" <> (show (persoY player)))
   let bg = Pictures [ Translate 0 sc bgnd   
             , Translate 0 (sc+358) bgnd ] in
-  Pictures [bg, (Translate (persoX player) (persoY player) perso), Pictures (map renderProjectile projs), Pictures (map renderEnnemy enns)]
+  Pictures [bg, (Translate px py perso), Pictures (map renderProjectile projs), Pictures (map renderEnnemy enns)]
   where
-    renderProjectile (Projectile _ _ (Disque cx cy r) dir) = Translate cx cy projectile
+    renderProjectile (Projectile _ (Disque cx cy r) dir) = Translate cx cy projectile
     renderEnnemy (Ennemy _ (Disque cx cy r) _) = Translate cx cy ennemy
 
 
@@ -38,13 +38,6 @@ handleEvents ev (GameControl kbd gs) =
     EventKey (SpecialKey KeySpace) Down _ _ -> 
       (GameControl kbd (shoot gs))
     
-    -- Mouse click (your existing code)
-    EventKey (MouseButton LeftButton) Down _ (mx, my) ->
-      let GameState player _ _ _ _= gs
-          touched = isInside mx my (persoX player) (persoY player)
-      in if touched
-        then trace "Touché !" (GameControl (handleKeyEvent ev kbd) gs)
-         else GameControl kbd gs
 
     -- default
     _ ->  GameControl (handleKeyEvent ev kbd) gs
