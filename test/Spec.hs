@@ -1,2 +1,15 @@
+module Main where
+
+import Test.Hspec
+import ModelSpec
+
 main :: IO ()
-main = putStrLn "Test suite not yet implemented"
+main = hspec $ do
+  initGameStateSpec
+  moveLeftSpec
+  moveRightSpec
+  moveUpSpec
+  moveDownSpec
+  shootSpec
+  updateScrollSpec
+  genSpec

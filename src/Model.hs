@@ -73,39 +73,43 @@ initEnnemy :: Ennemy
 initEnnemy = Ennemy 2 (Disque (-275) 130 (ennemyCote / 2)) RightDir
 
 initProjectile :: Float -> Float -> Projectile
-initProjectile x y = Projectile 2 (Disque x y (projectileCOte / 2)) UpDir
+initProjectile x y = Projectile 5 (Disque x y (projectileCOte / 2)) UpDir
 
 initGameState :: GameState
 initGameState = GameState initPlayer [] [] ennemySpawnSpeed 0.0
 
 
 
-moveLeft :: GameState -> GameState
-moveLeft gs@(GameState player _ _ _ _) =
-  case persoHitbox player of
-    Rectangle x y w h | x > -(screenWidth / 2 - w / 2) ->
-      gs { player = player { persoHitbox = Rectangle (x - persoSpeed player) y w h } }
-    _ -> gs
-
-moveRight :: GameState -> GameState
-moveRight gs@(GameState player _ _ _ _) =
-  case persoHitbox player of
-    Rectangle x y w h | x < screenWidth / 2 - w / 2 ->
-      gs { player = player { persoHitbox = Rectangle (x + persoSpeed player) y w h } }
-    _ -> gs
-
 moveUp :: GameState -> GameState
 moveUp gs@(GameState player _ _ _ _) =
   case persoHitbox player of
-    Rectangle x y w h | y < screenHeight / 2 - h / 2 ->
-      gs { player = player { persoHitbox = Rectangle x (y + persoSpeed player) w h } }
+    Rectangle x y w h ->
+      let newY = min (screenHeight / 2 - h / 2) (y + persoSpeed player)
+      in gs { player = player { persoHitbox = Rectangle x newY w h } }
     _ -> gs
 
 moveDown :: GameState -> GameState
 moveDown gs@(GameState player _ _ _ _) =
   case persoHitbox player of
-    Rectangle x y w h | y > -(screenHeight / 2 - h / 2) ->
-      gs { player = player { persoHitbox = Rectangle x (y - persoSpeed player) w h } }
+    Rectangle x y w h ->
+      let newY = max (-(screenHeight / 2 - h / 2)) (y - persoSpeed player)
+      in gs { player = player { persoHitbox = Rectangle x newY w h } }
+    _ -> gs
+
+moveLeft :: GameState -> GameState
+moveLeft gs@(GameState player _ _ _ _) =
+  case persoHitbox player of
+    Rectangle x y w h ->
+      let newX = max (-(screenWidth / 2 - w / 2)) (x - persoSpeed player)
+      in gs { player = player { persoHitbox = Rectangle newX y w h } }
+    _ -> gs
+
+moveRight :: GameState -> GameState
+moveRight gs@(GameState player _ _ _ _) =
+  case persoHitbox player of
+    Rectangle x y w h ->
+      let newX = min (screenWidth / 2 - w / 2) (x + persoSpeed player)
+      in gs { player = player { persoHitbox = Rectangle newX y w h } }
     _ -> gs
 
 -- Projectile stuff
@@ -328,42 +332,47 @@ prop_inv_GameState gs =
 
 --postconditions
 
-prop_post_moveLeft :: GameState -> Bool
-prop_post_moveLeft gs@(GameState (Player sp (Rectangle x _ _ _) _) _ _ _ _) =
-  case moveLeft gs of
-    GameState (Player _ (Rectangle x2 _ _ _) _) _ _ _ _ -> 
-      if prop_pre_moveLeft gs
-        then x2 == x - sp
-        else x2 == x
-    _ -> False
-    
-
-prop_post_moveRight :: GameState -> Bool
-prop_post_moveRight gs@(GameState (Player sp (Rectangle x _ _ _) _) _ _ _ _) =
-  case moveRight gs of
-    GameState (Player _ (Rectangle x2 _ _ _) _) _ _ _ _ ->
-      if prop_pre_moveRight gs
-        then x2 == x + sp
-        else x2 == x
-    _ -> False
-
 prop_post_moveUp :: GameState -> Bool
-prop_post_moveUp gs@(GameState (Player sp (Rectangle _ y _ _) _) _ _ _ _) =
+prop_post_moveUp gs@(GameState (Player sp (Rectangle x y w h) _) _ _ _ _) =
   case moveUp gs of
     GameState (Player _ (Rectangle _ y2 _ _) _) _ _ _ _ ->
       if prop_pre_moveUp gs
-        then y2 == y + sp
-        else y2 == y
+      then y2 == min (screenHeight / 2 - h / 2) (y + sp)  -- clamped
+      else y2 == y
     _ -> False
+prop_post_moveUp _ = False
 
 prop_post_moveDown :: GameState -> Bool
-prop_post_moveDown gs@(GameState (Player sp (Rectangle _ y _ _) _) _ _ _ _) =
+prop_post_moveDown gs@(GameState (Player sp (Rectangle x y w h) _) _ _ _ _) =
   case moveDown gs of
     GameState (Player _ (Rectangle _ y2 _ _) _) _ _ _ _ ->
       if prop_pre_moveDown gs
-        then y2 == y - sp
-        else y2 == y
+      then y2 == max (-(screenHeight / 2 - h / 2)) (y - sp)  -- clamped
+      else y2 == y
     _ -> False
+prop_post_moveDown _ = False
+
+
+prop_post_moveLeft :: GameState -> Bool
+prop_post_moveLeft gs@(GameState (Player sp (Rectangle x y w h) _) _ _ _ _) =
+  case moveLeft gs of
+    GameState (Player _ (Rectangle x2 _ _ _) _) _ _ _ _ ->
+      if prop_pre_moveLeft gs
+      then x2 == max (-(screenWidth / 2 - w / 2)) (x - sp)
+      else x2 == x
+    _ -> False
+prop_post_moveLeft _ = False
+
+prop_post_moveRight :: GameState -> Bool
+prop_post_moveRight gs@(GameState (Player sp (Rectangle x y w h) _) _ _ _ _) =
+  case moveRight gs of
+    GameState (Player _ (Rectangle x2 _ _ _) _) _ _ _ _ ->
+      if prop_pre_moveRight gs
+      then x2 == min (screenWidth / 2 - w / 2) (x + sp)
+      else x2 == x
+    _ -> False
+prop_post_moveRight _ = False
+
 
 -- postconditions shoot (le nombre de projectiles doit augmenter de 1)
 prop_post_shoot :: GameState -> Bool
