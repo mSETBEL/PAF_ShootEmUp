@@ -20,15 +20,21 @@ initGame = GameControl {
                   state = initGameState
 }
 
-render :: Picture -> Picture -> Picture -> Picture -> GameControl -> Picture
-render bgnd perso projectile ennemy (GameControl _ (GameState (Player _ (Model.Rectangle px py pw ph) _) projs enns est sc)) =
+render :: Picture -> Picture -> Picture ->  Picture -> Picture -> Picture -> Picture -> Picture -> GameControl -> Picture
+render bgnd perso ball ennemyRed ennemyGreen ennemyBlue ennemyYellow tear (GameControl _ (GameState (Player _ (Model.Rectangle px py pw ph) _) projs enns est sc)) =
   -- trace ("px=" <> (show (persoX player)) <> ", py=" <> (show (persoY player)))
   let bg = Pictures [ Translate 0 sc bgnd   
             , Translate 0 (sc+358) bgnd ] in
-  Pictures [bg, (Translate px py perso), Pictures (map renderProjectile projs), Pictures (map renderEnnemy enns)]
+  Pictures [bg, (Translate (px+ pw/2) (py+ph/2) perso), Pictures (map renderProjectile projs), Pictures (map renderEnnemy enns)]
   where
-    renderProjectile (Projectile _ (Disque cx cy r) dir) = Translate cx cy projectile
-    renderEnnemy (Ennemy _ (Disque cx cy r) _) = Translate cx cy ennemy
+    renderProjectile (Projectile _ (Disque cx cy r) dir t) = Translate cx cy (case t of
+                                              Bullet -> ball
+                                              Tear -> tear)
+    renderEnnemy (Ennemy _ (Disque cx cy r) _ t _ _) = Translate cx cy (case t of
+                                              Red -> ennemyRed
+                                              Green -> ennemyGreen
+                                              Blue -> ennemyBlue
+                                              Yellow -> ennemyYellow)
 
 
 handleEvents :: Event -> GameControl -> GameControl
@@ -66,14 +72,18 @@ main :: IO ()
 main = do
   bgnd <- loadBMP "./assets/background.bmp"
   perso <- loadBMP "./assets/perso.bmp"
-  projectile <- loadBMP "./assets/ball.bmp"
-  ennemy <- loadBMP "./assets/ennemy.bmp"
+  ball <- loadBMP "./assets/ball.bmp"
+  ennemyRed <- loadBMP "./assets/redE.bmp"
+  ennemyGreen <- loadBMP "./assets/greenE.bmp"
+  ennemyBlue <- loadBMP "./assets/blueE.bmp"
+  ennemyYellow <- loadBMP "./assets/yellowE.bmp"
+  tear <- loadBMP "./assets/tear.bmp"
   
   play (InWindow "Minijeu" (566, 358) (10, 10)) 
        black
         60
         initGame
-        (render bgnd perso projectile ennemy)
+        (render bgnd perso ball ennemyRed ennemyGreen ennemyBlue ennemyYellow tear)
         handleEvents
         update
 
