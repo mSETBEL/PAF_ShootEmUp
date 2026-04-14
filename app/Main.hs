@@ -32,29 +32,36 @@ data Assets = Assets {
   , blueAsset    :: Picture
   , yellowAsset  :: Picture
   , lifeAssets   :: [Picture]  
+  , gameOverAsset :: Picture
   }
 
 render :: Assets -> GameControl -> Picture
-render assets (GameControl _ (GameState _ (Player _ (Model.Rectangle px py pw ph) hp inv) projs enns est sc)) =
-  let bg       = Pictures [ Translate 0 sc bgnd, Translate 0 (sc+358) bgnd ]
-      projPics = Pictures (map renderProjectile projs)
-      ennPics  = Pictures (map renderEnnemy enns)
-      lifePic = Translate (screenWidth/2-60) (-screenHeight/2 + 20) 
-              (lifeAssets assets !! hp)
-      persoPic = if inv > 0 && inv `mod` 20 < 10
-           then persoInvAsset assets
-           else persoAsset assets
-  in Pictures [bg, Translate (px + pw/2) (py + ph/2) persoPic, projPics, ennPics, lifePic]
-  where
-    bgnd = bgndAsset assets
-    renderProjectile (Projectile _ (Disque cx cy r) _ t) = Translate cx cy $ case t of
-      Bullet -> ballAsset assets
-      Tear   -> tearAsset assets
-    renderEnnemy (Ennemy _ (Disque cx cy r) _ t _ _ _) = Translate cx cy $ case t of
-      Red    -> redAsset assets
-      Green  -> greenAsset assets
-      Blue   -> blueAsset assets
-      Yellow -> yellowAsset assets
+render assets (GameControl _ (GameState gameOver (Player _ (Model.Rectangle px py pw ph) hp inv) projs enns est sc)) =
+
+  if gameOver 
+  then let bg       = Pictures [ Translate 0 sc bgnd, Translate 0 (sc+358) bgnd ]
+       in Pictures [bg,  Translate 0 0 (gameOverAsset assets)]
+   else
+
+    let bg       = Pictures [ Translate 0 sc bgnd, Translate 0 (sc+358) bgnd ]
+        projPics = Pictures (map renderProjectile projs)
+        ennPics  = Pictures (map renderEnnemy enns)
+        lifePic = Translate (screenWidth/2-60) (-screenHeight/2 + 20) 
+                (lifeAssets assets !! hp)
+        persoPic = if inv > 0 && inv `mod` 20 < 10
+            then persoInvAsset assets
+            else persoAsset assets
+    in Pictures [bg, Translate (px + pw/2) (py + ph/2) persoPic, projPics, ennPics, lifePic]
+    where
+      bgnd = bgndAsset assets
+      renderProjectile (Projectile _ (Disque cx cy r) _ t) = Translate cx cy $ case t of
+        Bullet -> ballAsset assets
+        Tear   -> tearAsset assets
+      renderEnnemy (Ennemy _ (Disque cx cy r) _ t _ _) = Translate cx cy $ case t of
+        Red    -> redAsset assets
+        Green  -> greenAsset assets
+        Blue   -> blueAsset assets
+        Yellow -> yellowAsset assets
 
 handleEvents :: Event -> GameControl -> GameControl
 handleEvents ev (GameControl kbd gs) =
@@ -71,7 +78,7 @@ handleEvents ev (GameControl kbd gs) =
 
 update :: Float -> GameControl -> GameControl
 update _ (GameControl kbd gs) = 
-  if lost gs then ( GameControl kbd gs )
+  if lost gs then ( GameControl kbd (updateScroll gs ) )
     else
     let gs1 = if isKeyDown (SpecialKey KeyLeft) kbd then moveLeft gs else gs in 
     let gs2 = if isKeyDown (SpecialKey KeyRight) kbd then moveRight gs1 else gs1 in 
@@ -104,6 +111,7 @@ main = do
     <*> loadBMP "./assets/blueE.bmp"
     <*> loadBMP "./assets/yellowE.bmp"
     <*> mapM (\n -> loadBMP $ "./assets/" <> show n <> "life.bmp") [0..5]
+    <*> loadBMP "./assets/gameover.bmp"
 
   play (InWindow "Minijeu" (566, 358) (10, 10))
        black 60

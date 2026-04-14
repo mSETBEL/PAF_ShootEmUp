@@ -32,7 +32,6 @@ data Ennemy = Ennemy {
                           , ennemyDirection :: (Float, Float)
                           , ennemyType :: EnemyType
                           , ennemyPhase :: Float
-                          , ennemyHealth :: Int
                           , onScreen :: Bool
                           }
   deriving (Show)
@@ -55,7 +54,7 @@ data Hitbox = Point Float Float
 
 -- constantes de jeu
 ennemySpawnSpeed :: Int
-ennemySpawnSpeed = 900
+ennemySpawnSpeed = 1500
 scrollSpeed :: Float
 scrollSpeed = 0.5
 
@@ -159,16 +158,16 @@ updateProjectiles (GameState l player projs e est scrollOffset) =
 
 -- enemy stuff
 -- fonction générale de déplacement d'un ennemi selon son type
-moveEnnemy :: Ennemy -> (Ennemy, Maybe Projectile)
-moveEnnemy ennemy = case ennemyType ennemy of
+moveEnnemy :: Ennemy -> Hitbox -> (Ennemy, Maybe Projectile)
+moveEnnemy ennemy ht = case ennemyType ennemy of
   Red    -> (moveRedEnnemy ennemy, Nothing)
   Yellow -> (moveYellowEnnemy ennemy, Nothing)
   Blue   -> moveBlueEnnemy ennemy
-  _      -> (ennemy, Nothing)
+  Green  -> (moveGreenEnnemy ennemy ht, Nothing)
 
 -- mouvements ennemies rouges : ils se déplacent horizontalement et font un mouvement de haut en bas
 moveRedEnnemy :: Ennemy -> Ennemy
-moveRedEnnemy e@(Ennemy sp (Disque cx cy r) (dx, dy) Red phase _ _) =
+moveRedEnnemy e@(Ennemy sp (Disque cx cy r) (dx, dy) Red phase _) =
   let
     newCx = cx + dx * sp
     (newDx, finalCx) =
@@ -187,7 +186,7 @@ moveRedEnnemy e@(Ennemy sp (Disque cx cy r) (dx, dy) Red phase _ _) =
 
 -- mouvements des ennemies jaunes : ils arrivent par le bas en diagonale et rebondissent sur les bords de l'écran
 moveYellowEnnemy :: Ennemy -> Ennemy
-moveYellowEnnemy e@(Ennemy sp (Disque cx cy r) (dx, dy) Yellow _ _ _ ) =
+moveYellowEnnemy e@(Ennemy sp (Disque cx cy r) (dx, dy) Yellow _ _ ) =
   let (newDx, finalCx) =
         if cx + r >= screenWidth / 2 && dx > 0
         then (-dx, screenWidth / 2 - r)
@@ -205,7 +204,7 @@ moveYellowEnnemy e@(Ennemy sp (Disque cx cy r) (dx, dy) Yellow _ _ _ ) =
 
 -- mouvements des ennemis bleus : ils se déplacent de gauchent à droite en haut de l'écran et tirent des projectiles vers le bas à intervalles réguliers
 moveBlueEnnemy :: Ennemy -> (Ennemy, Maybe(Projectile))
-moveBlueEnnemy e@(Ennemy sp (Disque cx cy r) (dx, dy) Blue phase _ onScreen) =
+moveBlueEnnemy e@(Ennemy sp (Disque cx cy r) (dx, dy) Blue phase onScreen) =
   let newCx = cx + dx * sp
       (newDx, finalCx) =
         if newCx + r >= screenWidth / 2  && dx > 0
@@ -225,11 +224,22 @@ moveBlueEnnemy e@(Ennemy sp (Disque cx cy r) (dx, dy) Blue phase _ onScreen) =
          , ennemyPhase      = finalPhase })
      , proj )
 
+-- mouvements des ennemis verts : ils suivent le joueur 
+moveGreenEnnemy :: Ennemy -> Hitbox -> Ennemy
+moveGreenEnnemy e@(Ennemy sp (Disque cx cy r) _ _ lives _) (Rectangle playerCx playerCy playerW playerH) =
+  let dx      = playerCx - cx
+      dy      = playerCy - cy
+      dist    = sqrt (dx*dx + dy*dy)
+      normDx  = if dist == 0 then 0 else dx / dist
+      normDy  = if dist == 0 then 0 else dy / dist
+  in e { ennemyHitbox    = Disque (cx + normDx * sp) (cy + normDy * sp) r
+       , ennemyDirection = (normDx, normDy) }
+
 -- fonctions constructrices d'ennemis
 spawnYellowEnnemy :: Float -> Ennemy
 spawnYellowEnnemy playerX = Ennemy 4
                                (Disque spawnX (-screenHeight / 2 - ennemyCote) (ennemyCote / 2))
-                               (dir, 1) Yellow 0 1 False
+                               (dir, 1) Yellow 0 False
   where
     seed   = round playerX :: Int
     spawnX = fromIntegral ((seed * 1103515245 + 12345) `mod` round screenWidth) - screenWidth / 2 --arrive par un endroit selon la position du joueur
@@ -245,22 +255,28 @@ spawnRedEnnemies playerY = map makeOne [0..3]
     makeOne i = Ennemy 2
                   (Disque (startX + fromIntegral i * gap) 50 r)
                   (side, 0) Red 
-                  (fromIntegral i * pi / 2) 1 False
+                  (fromIntegral i * pi / 2) False
 
 spawnBlueEnnemies :: [Ennemy]
 spawnBlueEnnemies = 
                   [ Ennemy 2
-                    (Disque (-(screenWidth / 2)) 100 (ennemyCote / 2))
-                    (1, 0) Blue tearTimer 1 False , 
+                    (Disque (-screenWidth / 2) 100 (ennemyCote / 2))
+                    (1, 0) Blue tearTimer False , 
                   Ennemy 2
-                    (Disque ((screenWidth / 2)) 100 (ennemyCote / 2))
-                    (-1, 0) Blue tearTimer 1 False
+                    (Disque (screenWidth / 2) 100 (ennemyCote / 2))
+                    (-1, 0) Blue tearTimer False
                   ]       
+
+spawnGreenEnnemy :: Ennemy
+spawnGreenEnnemy = Ennemy 1
+                    (Disque (screenWidth / 2) (-100) ennemyCote) 
+                    (-1, 0) Green 3 False
 
 -- enlever les ennemies tués et les projectiles qui ont tué un ennemi, gère aussi les perte de vie du joueur et l'invincibilité temporaire après une collision
 killEnnemy :: GameState -> GameState
 killEnnemy gs@(GameState _ player projs enns est _) =
-  let updatedEnns = filter (not . isKilled) enns in
+  let updatedGreenEnns = takeGreenLife enns in
+  let updatedEnns = filter (not . isKilled) updatedGreenEnns in
   let updatedProj = filter (not . hasKilled) projs
   in gs { enemies = updatedEnns, projectiles = updatedProj, player = newPlayer, lost = newLost }
   where
@@ -268,12 +284,17 @@ killEnnemy gs@(GameState _ player projs enns est _) =
                 then player { persoHealth =max 0 (persoHealth player - 1), invincibleTimer = 70 }
                 else player { invincibleTimer = max 0 (invincibleTimer player - 1) }
     newLost = persoHealth newPlayer <= 0
-    isKilled ennemy = any (\proj ->  projType proj == Bullet && collision (projHitbox proj) (ennemyHitbox ennemy)) projs ||( collision (ennemyHitbox ennemy) (persoHitbox player) && invincibleTimer player == 0)
+    takeGreenLife = map (\enn -> if ennemyType enn == Green && ((any (\proj -> projType proj == Bullet && collision (projHitbox proj) (ennemyHitbox enn)) projs) || (collision (ennemyHitbox enn) (persoHitbox player) && invincibleTimer player == 0))
+                                  then enn { ennemyPhase = ennemyPhase enn - 1 }
+                                  else enn)
+    isKilled ennemy = case ennemyType ennemy of
+      Green -> ennemyPhase ennemy <= 0
+      _ -> any (\proj ->  projType proj == Bullet && collision (projHitbox proj) (ennemyHitbox ennemy)) projs ||( collision (ennemyHitbox ennemy) (persoHitbox player) && invincibleTimer player == 0)
     hasKilled proj = any (\ennemy -> projType proj == Bullet && collision (projHitbox proj) (ennemyHitbox ennemy)) enns || (projType proj == Tear && collision (projHitbox proj) (persoHitbox player) && invincibleTimer player == 0)
 
 -- les ennemies spawn en dehors de l'écran, dès qu'ils entrent dans l'écran, ils n'en sortent plus
 updateOnScreen :: Ennemy -> Ennemy
-updateOnScreen e@(Ennemy _ (Disque cx cy r) _ _ _ _ onS) =
+updateOnScreen e@(Ennemy _ (Disque cx cy r) _ _ _ onS) =
   e { onScreen = onS ||  -- quand l'ennemi rentre dans l'écran, il reste dans l'écran
         cx - r >= -(screenWidth / 2)
      && cx + r <= screenWidth / 2
@@ -284,7 +305,7 @@ updateOnScreen e@(Ennemy _ (Disque cx cy r) _ _ _ _ onS) =
 updateEnnemies :: GameState -> GameState
 updateEnnemies gs@(GameState _ player projs enns est _) =
    
-  let (movedEnns, newProjs) = unzip (map moveEnnemy enns)
+  let (movedEnns, newProjs) = unzip (map (\e -> moveEnnemy e (persoHitbox player)) enns)
       extraProjs             = [ p | Just p <- newProjs ]
       moved                  = gs { enemies      = movedEnns
                                   , projectiles  = projs ++ extraProjs }
@@ -295,13 +316,15 @@ updateEnnemies gs@(GameState _ player projs enns est _) =
                    Rectangle _ y _ _ -> y
                    _                 -> 0
         in killed { enemies = spawnRedEnnemies py ++ enemies killed, ennemySpawnTimer = ennemySpawnSpeed }
-    600 -> let px = case persoHitbox player of
+    1200 -> let px = case persoHitbox player of
                    Rectangle x _ _ _ -> x
                    _                 -> 0
         in killed { enemies          = spawnYellowEnnemy px : enemies killed
                   , ennemySpawnTimer = est - 1 }
-    300 -> killed { enemies = spawnBlueEnnemies ++ enemies killed, ennemySpawnTimer = est-1 }
+    900 -> killed { enemies = spawnBlueEnnemies ++ enemies killed, ennemySpawnTimer = est-1 }
     
+    600 -> killed { enemies = spawnGreenEnnemy : enemies killed, ennemySpawnTimer = est-1 }
+
     _ -> killed { ennemySpawnTimer = est-1 }
 
 
@@ -406,11 +429,12 @@ prop_pre_updateScroll gs = scrollOffset gs > -screenHeight && scrollOffset gs <=
 
 -- le joueur doit être dans les limites de l'écran
 prop_inv_player :: GameState -> Bool
-prop_inv_player (GameState _ (Player sp (Rectangle px py pw ph) hp _) _ _ _ _) =
+prop_inv_player (GameState _ (Player sp (Rectangle px py pw ph) hp inv) _ _ _ _) =
   sp > 0 
   && px >= -(screenWidth / 2) && px <= screenWidth / 2 - pw
   && py >= -(screenHeight / 2) && py <= screenHeight / 2 - ph 
   && hp >= 0
+  && inv >= 0 && inv <= 70
 prop_inv_player _ = False
 
 -- les projectiles doivent être dans les limites de l'écran
@@ -429,11 +453,11 @@ prop_inv_enemies :: GameState -> Bool
 prop_inv_enemies (GameState _  _ _ enns _ _) =
   all valid enns
   where
-    valid (Ennemy sp (Disque cx cy r) _ _ _ _ True) =
+    valid (Ennemy sp (Disque cx cy r) _ _ _ True) =
       sp > 0
       && cx + r >= -(screenWidth / 2) && cx - r <= screenWidth / 2
       && cy + r >= -(screenHeight / 2) && cy - r <= screenHeight / 2
-    valid (Ennemy sp _ _ _ _ _ False) = sp > 0 -- les ennemis hors de l'écran n'ont pas de contraintes de position
+    valid (Ennemy sp _ _ _ _ False) = sp > 0 -- les ennemis hors de l'écran n'ont pas de contraintes de position
     valid _ = False
 
 

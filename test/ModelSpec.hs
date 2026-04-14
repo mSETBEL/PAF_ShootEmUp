@@ -15,8 +15,9 @@ genGameStateFree = do
   hp    <- choose (0, 5)
   timer <- choose (0, 100)
   sc    <- choose (-358, 0)
-  return $ GameState
-    (Player sp (Rectangle x y playerWidth playerHeight) hp)
+  inv   <- choose (0, 70)
+  return $ GameState False
+    (Player sp (Rectangle x y playerWidth playerHeight) hp inv)
     [] [] timer sc
 
 -- bon générateur: génère toujours des états valides (respectant l'invariant)
@@ -25,11 +26,12 @@ genGameStateOk = do
   x     <- choose (-(screenWidth / 2 ), screenWidth / 2 - playerWidth)
   y     <- choose (-(screenHeight / 2 ), screenHeight / 2 - playerHeight)
   sp    <- choose (1, 5)
-  hp    <- choose (1, 5)  -- at least 1 health
+  hp    <- choose (1, 5) 
   timer <- choose (0, 100)
-  sc    <- choose (-screenHeight + 1, 0)  -- strictly within bounds
-  return $ GameState
-    (Player sp (Rectangle x y playerWidth playerHeight) hp)
+  sc    <- choose (-screenHeight + 1, 0)  
+  inv   <- choose (0, 70)
+  return $ GameState False
+    (Player sp (Rectangle x y playerWidth playerHeight) hp inv)
     [] [] timer sc
 
 -- 80% d'instance sures, 20% d'instances libres
