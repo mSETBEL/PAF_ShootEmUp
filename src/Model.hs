@@ -2,7 +2,8 @@ module Model where
 
 
 -- Types de données pour le jeu
-data GameState = GameState { player :: Player
+data GameState = GameState { lost :: Bool
+                           , player :: Player
                            , projectiles :: [Projectile]
                            , enemies :: [Ennemy]
                            , ennemySpawnTimer :: Int
@@ -14,6 +15,7 @@ data Player = Player {
                       persoSpeed :: Float
                     , persoHitbox :: Hitbox
                     , persoHealth :: Int
+                    , invincibleTimer :: Int
                     }
   deriving (Show)
 data Projectile = Projectile {
@@ -30,6 +32,7 @@ data Ennemy = Ennemy {
                           , ennemyDirection :: (Float, Float)
                           , ennemyType :: EnemyType
                           , ennemyPhase :: Float
+                          , ennemyHealth :: Int
                           , onScreen :: Bool
                           }
   deriving (Show)
@@ -77,19 +80,19 @@ tearTimer = 40
 
 --constructeurs 
 initPlayer :: Player
-initPlayer = Player 2 (Rectangle (-playerWidth / 2) (-100) playerWidth playerHeight) 5
+initPlayer = Player 2 (Rectangle (-playerWidth / 2) (-100) playerWidth playerHeight) 5 0
 
 
 initProjectile :: Float -> Float -> Direction  -> ProjType -> Projectile
 initProjectile x y dir t = Projectile 5 (Disque x y (projectileCOte / 2)) dir t
 
 initGameState :: GameState
-initGameState = GameState initPlayer [] [] 50 0.0
+initGameState = GameState False initPlayer [] [] 50 0.0
 
 
-
+-- mouvements du joueur
 moveUp :: GameState -> GameState
-moveUp gs@(GameState player _ _ _ _) =
+moveUp gs@(GameState _ player _ _ _ _) =
   case persoHitbox player of
     Rectangle x y w h ->
       let newY = min (screenHeight / 2 - h ) (y + persoSpeed player)
@@ -97,7 +100,7 @@ moveUp gs@(GameState player _ _ _ _) =
     _ -> gs
 
 moveDown :: GameState -> GameState
-moveDown gs@(GameState player _ _ _ _) =
+moveDown gs@(GameState _ player _ _ _ _) =
   case persoHitbox player of
     Rectangle x y w h ->
       let newY = max (-(screenHeight / 2 )) (y - persoSpeed player)
@@ -105,7 +108,7 @@ moveDown gs@(GameState player _ _ _ _) =
     _ -> gs
 
 moveLeft :: GameState -> GameState
-moveLeft gs@(GameState player _ _ _ _) =
+moveLeft gs@(GameState _ player _ _ _ _) =
   case persoHitbox player of
     Rectangle x y w h ->
       let newX = max (-(screenWidth / 2)) (x - persoSpeed player)
@@ -113,7 +116,7 @@ moveLeft gs@(GameState player _ _ _ _) =
     _ -> gs
 
 moveRight :: GameState -> GameState
-moveRight gs@(GameState player _ _ _ _) =
+moveRight gs@(GameState _ player _ _ _ _) =
   case persoHitbox player of
     Rectangle x y w h ->
       let newX = min (screenWidth / 2 - w) (x + persoSpeed player)
@@ -121,12 +124,13 @@ moveRight gs@(GameState player _ _ _ _) =
     _ -> gs
 
 -- Projectile stuff
+--joueur tire un projectile (vers le haut)
 shoot :: GameState -> GameState
-shoot gs@(GameState (Player _ (Rectangle px py pw ph) _) projs _ _ _) =
+shoot gs@(GameState _ (Player _ (Rectangle px py pw ph) _ _) projs _ _ _) =
   let newProj =  initProjectile (px+pw/2) (py + ph) UpDir Bullet
   in gs { projectiles = newProj : projs }
 
-
+-- on bouge les projectiles selon leur direction (gauche et droite pas encore utilisés)
 moveProjectile :: Projectile -> Projectile
 moveProjectile proj@(Projectile sp (Disque cx cy r) dir _) =
   let (dx, dy) = case dir of
@@ -138,21 +142,23 @@ moveProjectile proj@(Projectile sp (Disque cx cy r) dir _) =
       newCy = cy + dy 
   in proj { projHitbox = Disque newCx newCy r}
 
-cullProjectile :: [Projectile] -> [Projectile] -- Supprime les projectiles qui sont hors de l'écran
+-- on enlève les projectiles qui sont sortis de l'écran
+cullProjectile :: [Projectile] -> [Projectile] 
 cullProjectile = filter (\p -> onScreen p) 
   where
     onScreen (Projectile _ (Disque cx cy r) _ _) =
       cx + r >= -screenWidth / 2 && cx - r <= screenWidth / 2 && cy + r >= -screenHeight / 2 && cy - r <= screenHeight / 2
 
-
+-- fonction de m-a-j des projectiles : on les bouge et on enlève ceux qui sont sortis de l'écran
 updateProjectiles :: GameState -> GameState
-updateProjectiles (GameState player projs e est scrollOffset) =
+updateProjectiles (GameState l player projs e est scrollOffset) =
   let updatedProjs = map moveProjectile projs
       culledProjs = cullProjectile updatedProjs
-  in GameState player culledProjs e est scrollOffset
+  in GameState l player culledProjs e est scrollOffset
 
 
 -- enemy stuff
+-- fonction générale de déplacement d'un ennemi selon son type
 moveEnnemy :: Ennemy -> (Ennemy, Maybe Projectile)
 moveEnnemy ennemy = case ennemyType ennemy of
   Red    -> (moveRedEnnemy ennemy, Nothing)
@@ -160,9 +166,9 @@ moveEnnemy ennemy = case ennemyType ennemy of
   Blue   -> moveBlueEnnemy ennemy
   _      -> (ennemy, Nothing)
 
-
+-- mouvements ennemies rouges : ils se déplacent horizontalement et font un mouvement de haut en bas
 moveRedEnnemy :: Ennemy -> Ennemy
-moveRedEnnemy e@(Ennemy sp (Disque cx cy r) (dx, dy) Red phase _) =
+moveRedEnnemy e@(Ennemy sp (Disque cx cy r) (dx, dy) Red phase _ _) =
   let
     newCx = cx + dx * sp
     (newDx, finalCx) =
@@ -179,8 +185,9 @@ moveRedEnnemy e@(Ennemy sp (Disque cx cy r) (dx, dy) Red phase _) =
        , ennemyPhase = newPhase
    })
 
+-- mouvements des ennemies jaunes : ils arrivent par le bas en diagonale et rebondissent sur les bords de l'écran
 moveYellowEnnemy :: Ennemy -> Ennemy
-moveYellowEnnemy e@(Ennemy sp (Disque cx cy r) (dx, dy) Yellow _ _ ) =
+moveYellowEnnemy e@(Ennemy sp (Disque cx cy r) (dx, dy) Yellow _ _ _ ) =
   let (newDx, finalCx) =
         if cx + r >= screenWidth / 2 && dx > 0
         then (-dx, screenWidth / 2 - r)
@@ -196,9 +203,9 @@ moveYellowEnnemy e@(Ennemy sp (Disque cx cy r) (dx, dy) Yellow _ _ ) =
   in updateOnScreen (e { ennemyHitbox    = Disque finalCx finalCy r
        , ennemyDirection = (newDx, newDy) })
 
-
+-- mouvements des ennemis bleus : ils se déplacent de gauchent à droite en haut de l'écran et tirent des projectiles vers le bas à intervalles réguliers
 moveBlueEnnemy :: Ennemy -> (Ennemy, Maybe(Projectile))
-moveBlueEnnemy e@(Ennemy sp (Disque cx cy r) (dx, dy) Blue phase onScreen) =
+moveBlueEnnemy e@(Ennemy sp (Disque cx cy r) (dx, dy) Blue phase _ onScreen) =
   let newCx = cx + dx * sp
       (newDx, finalCx) =
         if newCx + r >= screenWidth / 2  && dx > 0
@@ -218,57 +225,64 @@ moveBlueEnnemy e@(Ennemy sp (Disque cx cy r) (dx, dy) Blue phase onScreen) =
          , ennemyPhase      = finalPhase })
      , proj )
 
-
+-- fonctions constructrices d'ennemis
 spawnYellowEnnemy :: Float -> Ennemy
 spawnYellowEnnemy playerX = Ennemy 4
                                (Disque spawnX (-screenHeight / 2 - ennemyCote) (ennemyCote / 2))
-                               (1, 1) Yellow 0 False
+                               (dir, 1) Yellow 0 1 False
   where
     seed   = round playerX :: Int
-    spawnX = fromIntegral ((seed * 1103515245 + 12345) `mod` round screenWidth) --arrive par un endroit selon la position du joueur
-             - screenWidth / 2
+    spawnX = fromIntegral ((seed * 1103515245 + 12345) `mod` round screenWidth) - screenWidth / 2 --arrive par un endroit selon la position du joueur
+    dir    = if spawnX < playerX then -1 else 1 
 
-spawnRedEnnemies :: [Ennemy]
-spawnRedEnnemies = map makeOne [0..3]
+spawnRedEnnemies :: Float -> [Ennemy]
+spawnRedEnnemies playerY = map makeOne [0..3]
   where
+    side      = if playerY > 0 then 1 else -1
     r         = ennemyCote / 2
     gap       = ennemyCote + 5
-    startX    = -(screenWidth / 2) - 4 * gap 
+    startX    = if side == 1 then (screenWidth / 2) + r else -(screenWidth / 2) - r - 4 * gap -- les ennemies appareissent à droite ou à gauche de l'écran selon la position du joueur
     makeOne i = Ennemy 2
                   (Disque (startX + fromIntegral i * gap) 50 r)
-                  (1,0) Red 
-                  (fromIntegral i * pi / 2) False
+                  (side, 0) Red 
+                  (fromIntegral i * pi / 2) 1 False
 
 spawnBlueEnnemies :: [Ennemy]
 spawnBlueEnnemies = 
                   [ Ennemy 2
                     (Disque (-(screenWidth / 2)) 100 (ennemyCote / 2))
-                    (1, 0) Blue tearTimer False , 
+                    (1, 0) Blue tearTimer 1 False , 
                   Ennemy 2
                     (Disque ((screenWidth / 2)) 100 (ennemyCote / 2))
-                    (-1, 0) Blue tearTimer  False
+                    (-1, 0) Blue tearTimer 1 False
                   ]       
 
-
+-- enlever les ennemies tués et les projectiles qui ont tué un ennemi, gère aussi les perte de vie du joueur et l'invincibilité temporaire après une collision
 killEnnemy :: GameState -> GameState
-killEnnemy gs@(GameState player projs enns est _) =
+killEnnemy gs@(GameState _ player projs enns est _) =
   let updatedEnns = filter (not . isKilled) enns in
   let updatedProj = filter (not . hasKilled) projs
-  in gs { enemies = updatedEnns, projectiles = updatedProj }
+  in gs { enemies = updatedEnns, projectiles = updatedProj, player = newPlayer, lost = newLost }
   where
-    isKilled ennemy = any (\proj ->  projType proj == Bullet && collision (projHitbox proj) (ennemyHitbox ennemy)) projs || collision (ennemyHitbox ennemy) (persoHitbox player)
-    hasKilled proj = any (\ennemy -> projType proj == Bullet && collision (projHitbox proj) (ennemyHitbox ennemy)) enns --enlever le projectile qui a tué un ennemi
+    newPlayer = if (any (\enn -> collision (ennemyHitbox enn) (persoHitbox player)) enns || any (\proj -> projType proj == Tear && collision (projHitbox proj) (persoHitbox player)) projs) && invincibleTimer player == 0
+                then player { persoHealth =max 0 (persoHealth player - 1), invincibleTimer = 70 }
+                else player { invincibleTimer = max 0 (invincibleTimer player - 1) }
+    newLost = persoHealth newPlayer <= 0
+    isKilled ennemy = any (\proj ->  projType proj == Bullet && collision (projHitbox proj) (ennemyHitbox ennemy)) projs ||( collision (ennemyHitbox ennemy) (persoHitbox player) && invincibleTimer player == 0)
+    hasKilled proj = any (\ennemy -> projType proj == Bullet && collision (projHitbox proj) (ennemyHitbox ennemy)) enns || (projType proj == Tear && collision (projHitbox proj) (persoHitbox player) && invincibleTimer player == 0)
 
+-- les ennemies spawn en dehors de l'écran, dès qu'ils entrent dans l'écran, ils n'en sortent plus
 updateOnScreen :: Ennemy -> Ennemy
-updateOnScreen e@(Ennemy _ (Disque cx cy r) _ _ _ onS) =
+updateOnScreen e@(Ennemy _ (Disque cx cy r) _ _ _ _ onS) =
   e { onScreen = onS ||  -- quand l'ennemi rentre dans l'écran, il reste dans l'écran
         cx - r >= -(screenWidth / 2)
      && cx + r <= screenWidth / 2
      && cy - r >= -(screenHeight / 2)
      && cy + r <= screenHeight / 2 }
 
+-- fonction de m-a-j des ennemis : on les bouge, on gère les tirs des ennemis bleus, on spawn de nouveaux ennemis selon le timer et on enlève ceux qui sont tués
 updateEnnemies :: GameState -> GameState
-updateEnnemies gs@(GameState player projs enns est _) =
+updateEnnemies gs@(GameState _ player projs enns est _) =
    
   let (movedEnns, newProjs) = unzip (map moveEnnemy enns)
       extraProjs             = [ p | Just p <- newProjs ]
@@ -277,7 +291,10 @@ updateEnnemies gs@(GameState player projs enns est _) =
       killed                 = killEnnemy moved
  
   in case est of
-    0 -> killed { enemies = spawnRedEnnemies ++ enemies killed, ennemySpawnTimer = ennemySpawnSpeed }
+    0 ->let py = case persoHitbox player of
+                   Rectangle _ y _ _ -> y
+                   _                 -> 0
+        in killed { enemies = spawnRedEnnemies py ++ enemies killed, ennemySpawnTimer = ennemySpawnSpeed }
     600 -> let px = case persoHitbox player of
                    Rectangle x _ _ _ -> x
                    _                 -> 0
@@ -288,7 +305,7 @@ updateEnnemies gs@(GameState player projs enns est _) =
     _ -> killed { ennemySpawnTimer = est-1 }
 
 
---
+--collision (réponse à la question de l'examen, pas tous utiles)
 collision :: Hitbox -> Hitbox -> Bool
 collision (Point x1 y1) (Point x2 y2) = 
   x1 == x2 && y1 == y2
@@ -329,7 +346,7 @@ collision (MurDroit segs) (Point px py) =
 collision a b = collision b a
 
 
-
+-- pour les murs, trouver le segment correspondant à la position y du point
 findSegment :: Float -> [(Float,Float)] -> Maybe (Float,Float,Float,Float)
 findSegment py pts = go pts
   where
@@ -338,7 +355,7 @@ findSegment py pts = go pts
       | otherwise            = go ((x2,y2):rest)
     go _ = Nothing
 
---scroll stuff
+-- scroll de l'arrière plan
 updateScroll :: GameState -> GameState
 updateScroll gs = gs { scrollOffset = if scrollOffset gs <= -screenHeight then 0 
                                  else scrollOffset gs - scrollSpeed }
@@ -350,29 +367,29 @@ updateScroll gs = gs { scrollOffset = if scrollOffset gs <= -screenHeight then 0
 
 -- preconditions movements
 prop_pre_moveLeft :: GameState -> Bool
-prop_pre_moveLeft (GameState (Player _ (Rectangle x _ w _) _) _ _ _ _) =
+prop_pre_moveLeft (GameState _ (Player _ (Rectangle x _ w _) _ _) _ _ _ _) =
   x > -(screenWidth / 2 )
 prop_pre_moveLeft _ = False
 
 prop_pre_moveRight :: GameState -> Bool
-prop_pre_moveRight (GameState (Player _ (Rectangle x _ w _) _) _ _ _ _) =
+prop_pre_moveRight (GameState _ (Player _ (Rectangle x _ w _) _ _) _ _ _ _) =
   x < screenWidth / 2 - w
 prop_pre_moveRight _ = False
 
 prop_pre_moveUp :: GameState -> Bool
-prop_pre_moveUp (GameState (Player _ (Rectangle _ y _ h) _) _ _ _ _) =
+prop_pre_moveUp (GameState _ (Player _ (Rectangle _ y _ h) _ _) _ _ _ _) =
   y < screenHeight / 2 - h 
 prop_pre_moveUp _ = False
 
 prop_pre_moveDown :: GameState -> Bool
-prop_pre_moveDown (GameState (Player _ (Rectangle _ y _ h) _) _ _ _ _) =
+prop_pre_moveDown (GameState _ (Player _ (Rectangle _ y _ h) _ _) _ _ _ _) =
   y > -(screenHeight / 2 )
 prop_pre_moveDown _ = False
 
 
 -- preconditions shoot
 prop_pre_shoot :: GameState -> Bool
-prop_pre_shoot (GameState (Player _ (Rectangle _ _ _ _) _) _ _ _ _) = True
+prop_pre_shoot (GameState _ (Player _ (Rectangle _ _ _ _) _ _) _ _ _ _) = True
 prop_pre_shoot _ = False
 
 -- preconditions spawn timer
@@ -389,16 +406,16 @@ prop_pre_updateScroll gs = scrollOffset gs > -screenHeight && scrollOffset gs <=
 
 -- le joueur doit être dans les limites de l'écran
 prop_inv_player :: GameState -> Bool
-prop_inv_player (GameState (Player sp (Rectangle px py pw ph) hp) _ _ _ _) =
+prop_inv_player (GameState _ (Player sp (Rectangle px py pw ph) hp _) _ _ _ _) =
   sp > 0 
-  && px >= -(screenWidth / 2 - pw / 2) && px <= screenWidth / 2 - pw / 2
-  && py >= -(screenHeight / 2 - ph / 2) && py <= screenHeight / 2 - ph / 2
+  && px >= -(screenWidth / 2) && px <= screenWidth / 2 - pw
+  && py >= -(screenHeight / 2) && py <= screenHeight / 2 - ph 
   && hp >= 0
 prop_inv_player _ = False
 
 -- les projectiles doivent être dans les limites de l'écran
 prop_inv_projectiles :: GameState -> Bool
-prop_inv_projectiles (GameState _ projs _ _ _) =
+prop_inv_projectiles (GameState _ _ projs _ _ _) =
   all valid projs
   where
     valid (Projectile sp (Disque cx cy r) _ _) =
@@ -409,13 +426,14 @@ prop_inv_projectiles (GameState _ projs _ _ _) =
 
 -- les ennemis doivent être dans les limites de l'écran
 prop_inv_enemies :: GameState -> Bool
-prop_inv_enemies (GameState _ _ enns _ _) =
+prop_inv_enemies (GameState _  _ _ enns _ _) =
   all valid enns
   where
-    valid (Ennemy sp (Disque cx cy r) _ _ _ _) =
+    valid (Ennemy sp (Disque cx cy r) _ _ _ _ True) =
       sp > 0
       && cx + r >= -(screenWidth / 2) && cx - r <= screenWidth / 2
       && cy + r >= -(screenHeight / 2) && cy - r <= screenHeight / 2
+    valid (Ennemy sp _ _ _ _ _ False) = sp > 0 -- les ennemis hors de l'écran n'ont pas de contraintes de position
     valid _ = False
 
 
@@ -440,9 +458,9 @@ prop_inv_GameState gs =
 --postconditions
 
 prop_post_moveUp :: GameState -> Bool
-prop_post_moveUp gs@(GameState (Player sp (Rectangle x y w h) _) _ _ _ _) =
+prop_post_moveUp gs@(GameState _ (Player sp (Rectangle x y w h) _ _) _ _ _ _) =
   case moveUp gs of
-    GameState (Player _ (Rectangle _ y2 _ _) _) _ _ _ _ ->
+    GameState _ (Player _ (Rectangle _ y2 _ _) _ _) _ _ _ _ ->
       if prop_pre_moveUp gs
       then y2 == min (screenHeight / 2 - h) (y + sp)  -- clamped
       else y2 == y
@@ -450,9 +468,9 @@ prop_post_moveUp gs@(GameState (Player sp (Rectangle x y w h) _) _ _ _ _) =
 prop_post_moveUp _ = False
 
 prop_post_moveDown :: GameState -> Bool
-prop_post_moveDown gs@(GameState (Player sp (Rectangle x y w h) _) _ _ _ _) =
+prop_post_moveDown gs@(GameState _ (Player sp (Rectangle x y w h) _ _) _ _ _ _) =
   case moveDown gs of
-    GameState (Player _ (Rectangle _ y2 _ _) _) _ _ _ _ ->
+    GameState _ (Player _ (Rectangle _ y2 _ _) _ _) _ _ _ _ ->
       if prop_pre_moveDown gs
       then y2 == max (-(screenHeight / 2 )) (y - sp)  -- clamped
       else y2 == y
@@ -461,9 +479,9 @@ prop_post_moveDown _ = False
 
 
 prop_post_moveLeft :: GameState -> Bool
-prop_post_moveLeft gs@(GameState (Player sp (Rectangle x y w h) _) _ _ _ _) =
+prop_post_moveLeft gs@(GameState _ (Player sp (Rectangle x y w h) _ _) _ _ _ _) =
   case moveLeft gs of
-    GameState (Player _ (Rectangle x2 _ _ _) _) _ _ _ _ ->
+    GameState _ (Player _ (Rectangle x2 _ _ _) _ _) _ _ _ _ ->
       if prop_pre_moveLeft gs
       then x2 == max (-(screenWidth / 2 )) (x - sp)
       else x2 == x
@@ -471,9 +489,9 @@ prop_post_moveLeft gs@(GameState (Player sp (Rectangle x y w h) _) _ _ _ _) =
 prop_post_moveLeft _ = False
 
 prop_post_moveRight :: GameState -> Bool
-prop_post_moveRight gs@(GameState (Player sp (Rectangle x y w h) _) _ _ _ _) =
+prop_post_moveRight gs@(GameState _ (Player sp (Rectangle x y w h) _ _) _ _ _ _) =
   case moveRight gs of
-    GameState (Player _ (Rectangle x2 _ _ _) _) _ _ _ _ ->
+    GameState _ (Player _ (Rectangle x2 _ _ _) _ _) _ _ _ _ ->
       if prop_pre_moveRight gs
       then x2 == min (screenWidth / 2 - w ) (x + sp)
       else x2 == x

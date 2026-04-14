@@ -22,8 +22,8 @@ genGameStateFree = do
 -- bon générateur: génère toujours des états valides (respectant l'invariant)
 genGameStateOk :: Gen GameState
 genGameStateOk = do
-  x     <- choose (-(screenWidth / 2 - playerWidth / 2), screenWidth / 2 - playerWidth / 2)
-  y     <- choose (-(screenHeight / 2 - playerHeight / 2), screenHeight / 2 - playerHeight / 2)
+  x     <- choose (-(screenWidth / 2 ), screenWidth / 2 - playerWidth)
+  y     <- choose (-(screenHeight / 2 ), screenHeight / 2 - playerHeight)
   sp    <- choose (1, 5)
   hp    <- choose (1, 5)  -- at least 1 health
   timer <- choose (0, 100)
