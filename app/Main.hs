@@ -25,6 +25,7 @@ data Assets = Assets {
     bgndAsset    :: Picture
   , persoAsset   :: Picture
   , persoInvAsset :: Picture
+  , persoSpeedAsset :: Picture
   , ballAsset    :: Picture
   , tearAsset    :: Picture
   , redAsset     :: Picture
@@ -33,10 +34,13 @@ data Assets = Assets {
   , yellowAsset  :: Picture
   , lifeAssets   :: [Picture]  
   , gameOverAsset :: Picture
+  , healthBonusAsset :: Picture
+  , speedBonusAsset :: Picture
+  , invBonusAsset :: Picture
   }
 
 render :: Assets -> GameControl -> Picture
-render assets (GameControl _ (GameState gameOver (Player _ (Model.Rectangle px py pw ph) hp inv) projs enns est sc)) =
+render assets (GameControl _ (GameState gameOver (Player _ (Model.Rectangle px py pw ph) hp inv sp) projs enns _ sc bons _ _)) =
 
   if gameOver 
   then let bg       = Pictures [ Translate 0 sc bgnd, Translate 0 (sc+358) bgnd ]
@@ -46,12 +50,15 @@ render assets (GameControl _ (GameState gameOver (Player _ (Model.Rectangle px p
     let bg       = Pictures [ Translate 0 sc bgnd, Translate 0 (sc+358) bgnd ]
         projPics = Pictures (map renderProjectile projs)
         ennPics  = Pictures (map renderEnnemy enns)
+        bonPics  = Pictures (map renderBonus bons)
         lifePic = Translate (screenWidth/2-60) (-screenHeight/2 + 20) 
                 (lifeAssets assets !! hp)
         persoPic = if inv > 0 && inv `mod` 20 < 10
             then persoInvAsset assets
-            else persoAsset assets
-    in Pictures [bg, Translate (px + pw/2) (py + ph/2) persoPic, projPics, ennPics, lifePic]
+            else if sp > 0
+                 then persoSpeedAsset assets
+                 else persoAsset assets
+    in Pictures [bg, Translate (px + pw/2) (py + ph/2) persoPic, projPics, ennPics, lifePic, bonPics]
     where
       bgnd = bgndAsset assets
       renderProjectile (Projectile _ (Disque cx cy r) _ t) = Translate cx cy $ case t of
@@ -62,6 +69,10 @@ render assets (GameControl _ (GameState gameOver (Player _ (Model.Rectangle px p
         Green  -> greenAsset assets
         Blue   -> blueAsset assets
         Yellow -> yellowAsset assets
+      renderBonus (Bonus (Disque cx cy r) t _ _) = Translate cx cy $ case t of
+        Health     -> healthBonusAsset assets
+        Speed      -> speedBonusAsset assets
+        Invincibility -> invBonusAsset assets
 
 handleEvents :: Event -> GameControl -> GameControl
 handleEvents ev (GameControl kbd gs) =
@@ -87,10 +98,12 @@ update _ (GameControl kbd gs) =
     let gs5 = updateProjectiles gs4 in
     let gs6 = updateEnnemies gs5 in
     let gs7 = updateScroll gs6 in
+    let gs8 = updateBonuses gs7 in
+    let gs9 = updateSpeedTimer gs8 in
     
     --let gs6 = updateWalls gs5 in
       
-    GameControl kbd gs7
+    GameControl kbd gs9
 
 
 --updtateScroll :: GameState -> GameState
@@ -104,6 +117,7 @@ main = do
     <$> loadBMP "./assets/background.bmp"
     <*> loadBMP "./assets/perso.bmp"
     <*> loadBMP "./assets/perso_inv.bmp"
+    <*> loadBMP "./assets/perso_speed2.bmp"
     <*> loadBMP "./assets/ball.bmp"
     <*> loadBMP "./assets/tear.bmp"
     <*> loadBMP "./assets/redE.bmp"
@@ -112,6 +126,9 @@ main = do
     <*> loadBMP "./assets/yellowE.bmp"
     <*> mapM (\n -> loadBMP $ "./assets/" <> show n <> "life.bmp") [0..5]
     <*> loadBMP "./assets/gameover.bmp"
+    <*> loadBMP "./assets/bonus_health.bmp"
+    <*> loadBMP "./assets/bonus_speed.bmp"
+    <*> loadBMP "./assets/bonus_invincibility.bmp"
 
   play (InWindow "Minijeu" (566, 358) (10, 10))
        black 60
