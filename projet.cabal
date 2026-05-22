@@ -41,6 +41,7 @@ library
     , containers
     , gloss
     , hspec
+    , mtl
   default-language: Haskell2010
 
 executable projet-exe
@@ -58,6 +59,7 @@ executable projet-exe
     , containers
     , gloss
     , hspec
+    , mtl
     , projet
   default-language: Haskell2010
 
@@ -78,5 +80,6 @@ test-suite projet-test
     , containers
     , gloss
     , hspec
+    , mtl
     , projet
   default-language: Haskell2010

@@ -1,5 +1,52 @@
 module Model where
 
+import Control.Monad.State
+
+
+-- on met le gamestate dans une monade State pour pouvoir le modifier facilement dans les fonctions de m-a-j du jeu
+type Game a = State GameState a
+
+resetGame :: Game ()
+resetGame = put initGameState
+
+moveLeftM :: Game ()
+moveLeftM = modify moveLeft
+moveRightM :: Game ()
+moveRightM = modify moveRight
+moveUpM :: Game ()
+moveUpM = modify moveUp
+moveDownM :: Game ()
+moveDownM = modify moveDown
+
+-- tir du joueur
+shootM :: Game ()
+shootM = modify shoot
+
+-- fonction de m-a-j
+updateProjectilesM :: Game ()
+updateProjectilesM = modify updateProjectiles
+updateEnnemiesM :: Game ()
+updateEnnemiesM = modify updateEnnemies
+updateScrollM :: Game ()
+updateScrollM = modify updateScroll
+updateBonusesM :: Game ()
+updateBonusesM = modify updateBonuses
+updateSpeedTimerM :: Game ()
+updateSpeedTimerM = modify updateSpeedTimer
+
+
+gameLoop :: [Bool] -> Game ()
+gameLoop [left, right, up, down] = do
+  if left then moveLeftM else return ()
+  if right then moveRightM else return ()
+  if up then moveUpM else return ()
+  if down then moveDownM else return ()
+  updateProjectilesM
+  updateEnnemiesM
+  updateScrollM
+  updateBonusesM
+  updateSpeedTimerM
+gameLoop _ = return ()
 
 -- Types de données pour le jeu
 data GameState = GameState { lost :: Bool
@@ -44,7 +91,6 @@ data Bonus = Bonus {
                       bonusHitbox :: Hitbox
                     , bonusType :: BonusType
                     , bonusDuration :: Maybe Int
-                    , bonusPhase :: Float
                     }
   deriving (Show)
 
@@ -92,6 +138,13 @@ projectileCOte = 8
 
 ennemyCote :: Float
 ennemyCote = 30
+
+healthBonusCote :: Float
+healthBonusCote = 16
+speedBonusCote :: Float
+speedBonusCote = 18
+invincibilityBonusCote :: Float
+invincibilityBonusCote = 16.5
 
 playerHeight :: Float
 playerHeight = 72
@@ -412,20 +465,20 @@ updateScroll gs = gs { scrollOffset = if scrollOffset gs <= -screenHeight then 0
 --bonus stuff
 spawnBonus :: Float -> BonusType -> Bonus
 spawnBonus playerX bType =
-  Bonus (Disque spawnX (screenHeight / 2 + 20) 10) bType duration 0
+  Bonus (Disque spawnX (screenHeight / 2 + 20) br) bType duration
   where
     spawnX   = calculateSpawnX playerX
-    duration = case bType of
-                 Health        -> Nothing
-                 Speed         -> Just 500
-                 Invincibility -> Just 500
+    (br, duration) = case bType of
+                 Health        -> (healthBonusCote/2 , Nothing)
+                 Speed         -> (speedBonusCote/2, Just speedBonusDuration)
+                 Invincibility -> (invincibilityBonusCote/2, Just invincibilityBonusDuration)
     calculateSpawnX x =
       if x < 0 then min (-x) (screenWidth / 2 - 50)
                else max (-x) (-(screenWidth / 2) + 50)
 
 
 moveBonus :: Bonus -> Bonus
-moveBonus b@(Bonus (Disque cx cy r) t d phase) =
+moveBonus b@(Bonus (Disque cx cy r) t d) =
   b { bonusHitbox = Disque cx (cy - 1) r }
 
 -- on enlève les bonus qui sont sortis de l'écran ou ramassés par le joueur
@@ -434,7 +487,7 @@ cullBonus gs@(GameState _ player _ _ _ _ bonuses _ _) =
   let updatedBonuses = filter (not . isCulled) bonuses
   in gs { bonuses = updatedBonuses }
   where
-    isCulled bonus@(Bonus (Disque cx cy r) _ _ _) =
+    isCulled bonus@(Bonus (Disque cx cy r) _ _) =
       cy + r < -(screenHeight / 2)|| collision (bonusHitbox bonus) (persoHitbox player)   
 
 --on applique les bonus ramassés par le joueur et on enlève ceux qui ont été appliqués
@@ -443,7 +496,7 @@ applyBonuses gs@(GameState _ player _ _ _ _ bonuses _ _) =
   let (newPlayer, newBonuses) = foldl applyOne (player, []) bonuses
   in gs { player = newPlayer, bonuses = newBonuses }
   where
-    applyOne (pl, acc) bonus@(Bonus _ t d _) =
+    applyOne (pl, acc) bonus@(Bonus _ t d) =
       if collision (bonusHitbox bonus) (persoHitbox pl)
       then let newPl = case t of
                         Health        -> if persoHealth pl < 5 then pl { persoHealth = persoHealth pl + 1 } else pl
@@ -517,7 +570,8 @@ prop_pre_updateScroll gs = scrollOffset gs > -screenHeight && scrollOffset gs <=
 
 -- le joueur doit être dans les limites de l'écran
 prop_inv_player :: GameState -> Bool
-prop_inv_player (GameState _ (Player sp (Rectangle px py pw ph) hp inv speedyTimer) _ _ _ _ _ _ _) =
+prop_inv_player gs =
+  let (Player sp (Rectangle px py pw ph) hp inv speedyTimer) = player gs in
   sp > 0 
   && px >= -(screenWidth / 2) && px <= screenWidth / 2 - pw
   && py >= -(screenHeight / 2) && py <= screenHeight / 2 - ph 
@@ -549,6 +603,18 @@ prop_inv_enemies (GameState _  _ _ enns _ _ _ _ _) =
     valid (Ennemy sp _ _ _ _ False) = sp > 0 -- les ennemis hors de l'écran n'ont pas de contraintes de position
     valid _ = False
 
+prop_inv_bonuses :: GameState -> Bool
+prop_inv_bonuses (GameState _  _ _ _ _ _ bonuses _ _) =
+  all valid bonuses
+  where
+    valid (Bonus (Disque cx cy r) t d) =
+      cx + r >= -(screenWidth / 2) && cx - r <= screenWidth / 2
+      && cy - r <= screenHeight / 2
+      && case t of
+            Health        -> d == Nothing
+            Speed         -> case d of Just dur -> dur == speedBonusDuration; Nothing -> False
+            Invincibility -> case d of Just dur -> dur == invincibilityBonusDuration; Nothing -> False
+    valid _ = False
 
 -- le scroll doit être entre le bas de l'écran et le haut de l'écran
 prop_inv_scroll :: GameState -> Bool
@@ -556,7 +622,7 @@ prop_inv_scroll gs = scrollOffset gs > -screenHeight && scrollOffset gs <= 0
 
 -- spawn timer doit être positif
 prop_inv_spawnTimer :: GameState -> Bool
-prop_inv_spawnTimer gs = ennemySpawnTimer gs >= 0
+prop_inv_spawnTimer gs = ennemySpawnTimer gs >= 0 && bonusSpawnTimer gs >= 0
 
 -- invariant global
 prop_inv_GameState :: GameState -> Bool
@@ -565,6 +631,7 @@ prop_inv_GameState gs =
   && prop_inv_projectiles gs
   && prop_inv_enemies gs
   && prop_inv_scroll gs
+  && prop_inv_bonuses gs
   && prop_inv_spawnTimer gs
 
 
@@ -616,3 +683,21 @@ prop_post_moveRight _ = False
 prop_post_shoot :: GameState -> Bool
 prop_post_shoot gs = length (projectiles (shoot gs)) == length (projectiles gs) + 1
 
+prop_post_applyBonuses :: GameState -> Bool
+prop_post_applyBonuses gs =
+  let
+      pl = player gs
+      newState = applyBonuses gs
+      newPl = player newState
+  in all (validBonus pl newPl) (bonuses gs)
+  where
+    validBonus pl newPl bonus = case (bonusType bonus) of 
+      Health -> if collision (bonusHitbox bonus) (persoHitbox pl)
+                then persoHealth newPl == min 5 (persoHealth pl + 1)
+                else persoHealth newPl == persoHealth pl
+      Speed -> if collision (bonusHitbox bonus) (persoHitbox pl)
+                then speedyTimer newPl == (case bonusDuration bonus of Just dur -> dur; Nothing -> 0)
+                else speedyTimer newPl == speedyTimer pl
+      Invincibility -> if collision (bonusHitbox bonus) (persoHitbox pl)
+                        then invincibleTimer newPl == (case bonusDuration bonus of Just dur -> dur; Nothing -> 0)
+                        else invincibleTimer newPl == invincibleTimer pl

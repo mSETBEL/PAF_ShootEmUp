@@ -11,5 +11,8 @@ main = hspec $ do
   moveUpSpec
   moveDownSpec
   shootSpec
-  updateScrollSpec
+  scrollSpec      
+  projectileSpec
+  ennemySpec
+  bonusSpec
   genSpec

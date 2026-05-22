@@ -3,6 +3,8 @@ module Main (main) where
 import Graphics.Gloss
 import Graphics.Gloss.Interface.IO.Interact
 import Debug.Trace (trace)
+import Control.Monad.State
+
 
 import Model
 
@@ -10,14 +12,14 @@ import Keyboard (Keyboard, initKeyboard, handleKeyEvent, isKeyDown)
 
 data GameControl = GameControl { 
     keyboard :: Keyboard,
-    state :: GameState
+    gsState :: GameState
   }
   deriving Show
 
 initGame :: GameControl
 initGame = GameControl {
                   keyboard = initKeyboard,
-                  state = initGameState
+                  gsState = initGameState
 }
 
 
@@ -69,7 +71,7 @@ render assets (GameControl _ (GameState gameOver (Player _ (Model.Rectangle px p
         Green  -> greenAsset assets
         Blue   -> blueAsset assets
         Yellow -> yellowAsset assets
-      renderBonus (Bonus (Disque cx cy r) t _ _) = Translate cx cy $ case t of
+      renderBonus (Bonus (Disque cx cy r) t _) = Translate cx cy $ case t of
         Health     -> healthBonusAsset assets
         Speed      -> speedBonusAsset assets
         Invincibility -> invBonusAsset assets
@@ -79,31 +81,28 @@ handleEvents ev (GameControl kbd gs) =
   case ev of
 
     EventKey (SpecialKey KeySpace) Down _ _ -> 
-      (GameControl kbd (shoot gs))
+      (GameControl kbd (execState shootM gs))
     
     EventKey (Char 'r') Down _ _ ->
-      GameControl initKeyboard initGameState
+      GameControl initKeyboard (execState resetGame gs)
 
     -- default
     _ ->  GameControl (handleKeyEvent ev kbd) gs
 
 update :: Float -> GameControl -> GameControl
 update _ (GameControl kbd gs) = 
-  if lost gs then ( GameControl kbd (updateScroll gs ) )
+  if lost gs then ( GameControl kbd (execState updateScrollM gs) )
     else
-    let gs1 = if isKeyDown (SpecialKey KeyLeft) kbd then moveLeft gs else gs in 
-    let gs2 = if isKeyDown (SpecialKey KeyRight) kbd then moveRight gs1 else gs1 in 
-    let gs3 = if isKeyDown (SpecialKey KeyUp) kbd then moveUp gs2 else gs2 in
-    let gs4 = if isKeyDown (SpecialKey KeyDown) kbd then moveDown gs3 else gs3 in
-    let gs5 = updateProjectiles gs4 in
-    let gs6 = updateEnnemies gs5 in
-    let gs7 = updateScroll gs6 in
-    let gs8 = updateBonuses gs7 in
-    let gs9 = updateSpeedTimer gs8 in
+    let k1 = isKeyDown (SpecialKey KeyLeft) kbd in
+    let k2 = isKeyDown (SpecialKey KeyRight) kbd in
+    let k3 = isKeyDown (SpecialKey KeyUp) kbd in
+    let k4 = isKeyDown (SpecialKey KeyDown) kbd in
+
+
+    let keys = [k1, k2, k3, k4]
     
-    --let gs6 = updateWalls gs5 in
-      
-    GameControl kbd gs9
+    in GameControl kbd ( execState (gameLoop keys) gs)
+
 
 
 --updtateScroll :: GameState -> GameState
