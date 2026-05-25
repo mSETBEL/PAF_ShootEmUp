@@ -25,9 +25,12 @@ source-repository head
 
 library
   exposed-modules:
+      Config
+      GameLogger
       Keyboard
-      Lib
       Model
+      Score
+      Vec2
   other-modules:
       Paths_projet
   autogen-modules:
@@ -42,6 +45,7 @@ library
     , gloss
     , hspec
     , mtl
+    , transformers
   default-language: Haskell2010
 
 executable projet-exe
@@ -61,12 +65,14 @@ executable projet-exe
     , hspec
     , mtl
     , projet
+    , transformers
   default-language: Haskell2010
 
 test-suite projet-test
   type: exitcode-stdio-1.0
   main-is: Spec.hs
   other-modules:
+      AlgebraSpec
       ModelSpec
       Paths_projet
   autogen-modules:
@@ -82,4 +88,5 @@ test-suite projet-test
     , hspec
     , mtl
     , projet
+    , transformers
   default-language: Haskell2010
