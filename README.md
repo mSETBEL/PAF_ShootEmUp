@@ -37,4 +37,4 @@ stack test
 
 ## Rapport
 
-Le rapport détaillé (en français) est dans [`Rapport.md`](Rapport.md).
+Le rapport détaillé est dans [`Rapport.md`](Rapport.md).
