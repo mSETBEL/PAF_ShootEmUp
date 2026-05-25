@@ -5,7 +5,7 @@
 
 ## 1. Description du jeu
 
-On a fait un clone très simplifié de *Xenon 2: Megablast*. Le joueur pilote un vaisseau qui défile vers le haut, tire des projectiles, et doit survivre contre quatre types d'ennemis plus un boss qui se débloque à 500 points. Il y a aussi cinq bonus ramassables (santé, vitesse, invincibilité, plus deux qu'on a rajoutés nous-mêmes : inversion du scroll et tir triple), un système d'essais, un game over avec reset, et un couloir de murs latéraux qui zigzague et défile avec le fond. Au départ on parlait aussi de faire un mode multijoueur en réseau ; on a vite renoncé et finalement on a câblé un mode coop sur le même clavier en fin de projet (cf. §7).
+On a fait un clone très simplifié de *Xenon 2: Megablast*. Le joueur pilote un vaisseau qui défile vers le haut, tire des projectiles, et doit survivre contre quatre types d'ennemis plus un boss qui se débloque à 500 points. Il y a aussi cinq bonus ramassables (santé, vitesse, invincibilité, inversion du scroll et tir triple), un système d'essais, un game over avec reset, et un couloir de murs latéraux qui zigzague et défile avec le fond. Au départ on parlait aussi de faire un mode multijoueur en réseau ; on a vite renoncé et finalement on a câblé un mode coop sur le même clavier en fin de projet (cf. §7).
 
 Le jeu tourne avec Gloss à 60 FPS dans une fenêtre 566×358.
 
@@ -66,8 +66,8 @@ stack test
 - **Health** : +1 PV (plafonné à 5).
 - **Speed** : augmente la vitesse pendant 500 frames.
 - **Invincibility** : invincibilité pendant 500 frames.
-- **ScrollReverse** (extension) : inverse le sens du défilement pendant 400 frames.
-- **TripleShotBonus** (extension) : passe l'arme en mode triple pendant 600 frames (timer décrémenté à chaque tick).
+- **ScrollReverse** : inverse le sens du défilement pendant 400 frames.
+- **TripleShotBonus** : passe l'arme en mode triple pendant 600 frames (timer décrémenté à chaque tick).
 
 ## 3. Architecture du code
 
